@@ -67,31 +67,20 @@ static struct Gamepad_queuedEvent * deviceEventQueue = NULL;
 static size_t deviceEventQueueSize = 0;
 static size_t deviceEventCount = 0;
 
-static void hatValueToXY(CFIndex value, CFIndex range, int * outX, int * outY) {
-	if (value == range) {
-		*outX = *outY = 0;
-		
-	} else {
-		if (value > 0 && value < range / 2) {
-			*outX = 1;
-			
-		} else if (value > range / 2) {
-			*outX = -1;
-			
-		} else {
-			*outX = 0;
-		}
-		
-		if (value > range / 4 * 3 || value < range / 4) {
-			*outY = -1;
-			
-		} else if (value > range / 4 && value < range / 4 * 3) {
-			*outY = 1;
-			
-		} else {
-			*outY = 0;
-		}
-	}
+static void hatValueToXY(CFIndex value, CFIndex logicalMin, CFIndex logicalMax, int * outX, int * outY) {
+    // value will be 0-7 for u,ul,l,dl,d,dr,r,ur respectively - 15 otherwise on Moga Pro
+    // CFIndex range = logicalMax - logicalMin + 1;
+	switch(value) {
+	    case 0: *outX = 0; *outY = -1; break;
+	    case 1: *outX = 1; *outY = -1; break;
+	    case 2: *outX = 1; *outY = 0; break;
+	    case 3: *outX = 1; *outY = 1; break;
+	    case 4: *outX = 0; *outY = 1; break;
+	    case 5: *outX = -1; *outY = 1; break;
+	    case 6: *outX = -1; *outY = 0; break;
+	    case 7: *outX = -1; *outY = -1; break;
+	    default: *outX = 0; *outY = 0; break;
+    }
 }
 
 static void queueInputEvent(unsigned int deviceID, enum Gamepad_eventType eventType, void * eventData) {
@@ -154,7 +143,7 @@ static void onDeviceValueChanged(void * context, IOReturn result, void * sender,
 		if (!hidDeviceRecord->axisElements[axisIndex].isHatSwitchSecondAxis &&
 		    hidDeviceRecord->axisElements[axisIndex].cookie == cookie) {
 			CFIndex integerValue;
-			
+
 			if (IOHIDValueGetLength(value) > 4) {
 				// Workaround for a strange crash that occurs with PS3 controller; was getting lengths of 39 (!)
 				continue;
@@ -172,9 +161,9 @@ static void onDeviceValueChanged(void * context, IOReturn result, void * sender,
 						integerValue--;
 					}
 				}
-				
-				hatValueToXY(integerValue, hidDeviceRecord->axisElements[axisIndex].logicalMax - hidDeviceRecord->axisElements[axisIndex].logicalMin + 1, &x, &y);
-				
+
+				hatValueToXY(integerValue, hidDeviceRecord->axisElements[axisIndex].logicalMin, hidDeviceRecord->axisElements[axisIndex].logicalMax, &x, &y);
+
 				if (x != deviceRecord->axisStates[axisIndex]) {
 					queueAxisEvent(deviceRecord,
 					               IOHIDValueGetTimeStamp(value) * timebaseInfo.numer / timebaseInfo.denom * 0.000000001,
@@ -184,7 +173,6 @@ static void onDeviceValueChanged(void * context, IOReturn result, void * sender,
 					
 					deviceRecord->axisStates[axisIndex] = x;
 				}
-				
 				if (y != deviceRecord->axisStates[axisIndex + 1]) {
 					queueAxisEvent(deviceRecord,
 					               IOHIDValueGetTimeStamp(value) * timebaseInfo.numer / timebaseInfo.denom * 0.000000001,
@@ -194,7 +182,6 @@ static void onDeviceValueChanged(void * context, IOReturn result, void * sender,
 					
 					deviceRecord->axisStates[axisIndex + 1] = y;
 				}
-				
 			} else {
 				float floatValue;
 				
